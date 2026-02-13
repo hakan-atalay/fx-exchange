@@ -6,15 +6,15 @@ import java.util.Objects;
 public class Wallet {
     private Long id;
     private Long userId;
-    private Long currencyId;
+    private String currencyCode;
     private BigDecimal balance = BigDecimal.ZERO;
 
     public Wallet() {}
 
-    public Wallet(Long id, Long userId, Long currencyId, BigDecimal balance) {
+    public Wallet(Long id, Long userId, String currencyCode, BigDecimal balance) {
         this.id = id;
         this.userId = userId;
-        this.currencyId = currencyId;
+        this.currencyCode = currencyCode;
         this.balance = balance;
     }
 
@@ -34,15 +34,15 @@ public class Wallet {
         this.userId = userId;
     }
 
-    public Long getCurrencyId() {
-        return currencyId;
-    }
+    public String getCurrencyCode() {
+		return currencyCode;
+	}
 
-    public void setCurrencyId(Long currencyId) {
-        this.currencyId = currencyId;
-    }
+	public void setCurrencyCode(String currencyCode) {
+		this.currencyCode = currencyCode;
+	}
 
-    public BigDecimal getBalance() {
+	public BigDecimal getBalance() {
         return balance;
     }
 
@@ -52,7 +52,7 @@ public class Wallet {
 
     @Override
     public int hashCode() {
-        return Objects.hash(userId, currencyId);
+        return Objects.hash(userId, currencyCode);
     }
 
     @Override
@@ -63,12 +63,12 @@ public class Wallet {
             return false;
         Wallet other = (Wallet) obj;
         return Objects.equals(userId, other.userId) &&
-               Objects.equals(currencyId, other.currencyId);
+               Objects.equals(currencyCode, other.currencyCode);
     }
 
     @Override
     public String toString() {
         return "Wallet [id=" + id + ", userId=" + userId +
-               ", currencyId=" + currencyId + ", balance=" + balance + "]";
+               ", currencyId=" + currencyCode + ", balance=" + balance + "]";
     }
 }

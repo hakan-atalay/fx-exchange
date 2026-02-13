@@ -1,4 +1,4 @@
-FROM jboss/wildfly:25.0.0.Final
+FROM quay.io/wildfly/wildfly:30.0.1.Final-jdk20
 
 USER root
 
