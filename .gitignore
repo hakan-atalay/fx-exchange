@@ -30,3 +30,6 @@ buildNumber.properties
 /.metadata/
 /.recommenders/
 bin/
+
+.env
+/deployments/*.war

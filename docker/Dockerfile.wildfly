@@ -1,0 +1,12 @@
+FROM jboss/wildfly:25.0.0.Final
+
+USER root
+
+RUN /opt/jboss/wildfly/bin/add-user.sh admin admin --silent
+
+COPY add-datasource.cli /opt/jboss/wildfly/add-datasource.cli
+COPY org /opt/jboss/wildfly/modules/org
+
+USER jboss
+
+CMD ["/opt/jboss/wildfly/bin/standalone.sh", "-b", "0.0.0.0"]

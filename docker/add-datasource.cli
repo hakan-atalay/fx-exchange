@@ -1,0 +1,18 @@
+batch
+
+/subsystem=datasources/jdbc-driver=postgresql:add(
+    driver-name=postgresql,
+    driver-module-name=org.postgresql,
+    driver-class-name=org.postgresql.Driver
+)
+
+/subsystem=datasources/data-source=FxExchangeDS:add(
+    jndi-name=java:/jdbc/FxExchangeDS,
+    driver-name=postgresql,
+    connection-url=jdbc:postgresql://${env.DB_HOST}:${env.DB_PORT}/${env.POSTGRES_DB},
+    user-name=${env.POSTGRES_USER},
+    password=${env.POSTGRES_PASSWORD},
+    enabled=true
+)
+
+run-batch
