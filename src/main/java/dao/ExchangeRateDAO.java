@@ -3,7 +3,8 @@ package dao;
 import entity.ExchangeRate;
 import jakarta.enterprise.context.ApplicationScoped;
 
-import java.sql.*;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -27,75 +28,75 @@ public class ExchangeRateDAO extends BaseDAO implements GenericDAO<ExchangeRate,
             "SELECT * FROM exchange_rates ORDER BY id";
 
     @Override
-    public ExchangeRate save(ExchangeRate rate) throws Exception {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(INSERT_SQL)) {
+    public ExchangeRate save(ExchangeRate rate) {
+        Long id = executeQuery(
+                INSERT_SQL,
+                ps -> {
+                    ps.setString(1, rate.getBaseCurrencyCode());
+                    ps.setString(2, rate.getTargetCurrencyCode());
+                    ps.setBigDecimal(3, rate.getRate());
+                    ps.setString(4, rate.getSource());
+                },
+                rs -> {
+                    if (rs.next()) {
+                        return rs.getLong("id");
+                    }
+                    return null;
+                }
+        );
 
-            ps.setString(1, rate.getBaseCurrencyCode());
-            ps.setString(2, rate.getTargetCurrencyCode());
-            ps.setBigDecimal(3, rate.getRate());
-            ps.setString(4, rate.getSource());
-
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                rate.setId(rs.getLong("id"));
-            }
-            return rate;
-        }
+        rate.setId(id);
+        return rate;
     }
 
     @Override
-    public ExchangeRate update(ExchangeRate rate) throws Exception {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(UPDATE_SQL)) {
-
-            ps.setBigDecimal(1, rate.getRate());
-            ps.setString(2, rate.getSource());
-            ps.setLong(3, rate.getId());
-
-            ps.executeUpdate();
-            return rate;
-        }
+    public ExchangeRate update(ExchangeRate rate) {
+        executeUpdate(
+                UPDATE_SQL,
+                ps -> {
+                    ps.setBigDecimal(1, rate.getRate());
+                    ps.setString(2, rate.getSource());
+                    ps.setLong(3, rate.getId());
+                }
+        );
+        return rate;
     }
 
     @Override
-    public void delete(Long id) throws Exception {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(DELETE_SQL)) {
-
-            ps.setLong(1, id);
-            ps.executeUpdate();
-        }
+    public void delete(Long id) {
+        executeUpdate(
+                DELETE_SQL,
+                ps -> ps.setLong(1, id)
+        );
     }
 
     @Override
-    public Optional<ExchangeRate> findById(Long id) throws Exception {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(FIND_BY_ID_SQL)) {
-
-            ps.setLong(1, id);
-            ResultSet rs = ps.executeQuery();
-
-            if (rs.next()) {
-                return Optional.of(mapRow(rs));
-            }
-            return Optional.empty();
-        }
+    public Optional<ExchangeRate> findById(Long id) {
+        return executeQuery(
+                FIND_BY_ID_SQL,
+                ps -> ps.setLong(1, id),
+                rs -> {
+                    if (rs.next()) {
+                        return Optional.of(mapRow(rs));
+                    }
+                    return Optional.empty();
+                }
+        );
     }
 
     @Override
-    public List<ExchangeRate> findAll() throws Exception {
-        List<ExchangeRate> list = new ArrayList<>();
-
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(FIND_ALL_SQL);
-             ResultSet rs = ps.executeQuery()) {
-
-            while (rs.next()) {
-                list.add(mapRow(rs));
-            }
-        }
-        return list;
+    public List<ExchangeRate> findAll() {
+        return executeQuery(
+                FIND_ALL_SQL,
+                ps -> {},
+                rs -> {
+                    List<ExchangeRate> list = new ArrayList<>();
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
+                    return list;
+                }
+        );
     }
 
     private ExchangeRate mapRow(ResultSet rs) throws SQLException {
@@ -105,7 +106,11 @@ public class ExchangeRateDAO extends BaseDAO implements GenericDAO<ExchangeRate,
         rate.setTargetCurrencyCode(rs.getString("target_currency_code"));
         rate.setRate(rs.getBigDecimal("rate"));
         rate.setSource(rs.getString("source"));
-        rate.setFetchedAt(rs.getTimestamp("fetched_at").toLocalDateTime());
+
+        if (rs.getTimestamp("fetched_at") != null) {
+            rate.setFetchedAt(rs.getTimestamp("fetched_at").toLocalDateTime());
+        }
+
         return rate;
     }
 }

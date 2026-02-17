@@ -3,7 +3,9 @@ package dao;
 import entity.Transaction;
 import jakarta.enterprise.context.ApplicationScoped;
 
-import java.sql.*;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -31,93 +33,89 @@ public class TransactionDAO extends BaseDAO implements GenericDAO<Transaction, L
             "SELECT * FROM transactions ORDER BY id DESC";
 
     @Override
-    public Transaction save(Transaction transaction) throws SQLException {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(INSERT_SQL)) {
+    public Transaction save(Transaction transaction) {
+        Long id = executeQuery(
+                INSERT_SQL,
+                ps -> {
+                    ps.setLong(1, transaction.getUserId());
+                    ps.setString(2, transaction.getFromCurrencyCode());
+                    ps.setString(3, transaction.getToCurrencyCode());
+                    ps.setBigDecimal(4, transaction.getAmountFrom());
+                    ps.setBigDecimal(5, transaction.getAmountTo());
+                    ps.setBigDecimal(6, transaction.getExchangeRate());
+                    ps.setString(7, transaction.getTransactionType());
+                    ps.setString(8, transaction.getStatus());
+                },
+                rs -> {
+                    if (rs.next()) {
+                        return rs.getLong("id");
+                    }
+                    return null;
+                }
+        );
 
-            ps.setLong(1, transaction.getUserId());
-            ps.setString(2, transaction.getFromCurrencyCode());
-            ps.setString(3, transaction.getToCurrencyCode());
-            ps.setBigDecimal(4, transaction.getAmountFrom());
-            ps.setBigDecimal(5, transaction.getAmountTo());
-            ps.setBigDecimal(6, transaction.getExchangeRate());
-            ps.setString(7, transaction.getTransactionType());
-            ps.setString(8, transaction.getStatus());
-
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                transaction.setId(rs.getLong("id"));
-            }
-
-            return transaction;
-        }
+        transaction.setId(id);
+        return transaction;
     }
 
     @Override
-    public Transaction update(Transaction transaction) throws SQLException {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(UPDATE_SQL)) {
-
-            ps.setLong(1, transaction.getUserId());
-            ps.setString(2, transaction.getFromCurrencyCode());
-            ps.setString(3, transaction.getToCurrencyCode());
-            ps.setBigDecimal(4, transaction.getAmountFrom());
-            ps.setBigDecimal(5, transaction.getAmountTo());
-            ps.setBigDecimal(6, transaction.getExchangeRate());
-            ps.setString(7, transaction.getTransactionType());
-            ps.setString(8, transaction.getStatus());
-            ps.setLong(9, transaction.getId());
-
-            ps.executeUpdate();
-            return transaction;
-        }
+    public Transaction update(Transaction transaction) {
+        executeUpdate(
+                UPDATE_SQL,
+                ps -> {
+                    ps.setLong(1, transaction.getUserId());
+                    ps.setString(2, transaction.getFromCurrencyCode());
+                    ps.setString(3, transaction.getToCurrencyCode());
+                    ps.setBigDecimal(4, transaction.getAmountFrom());
+                    ps.setBigDecimal(5, transaction.getAmountTo());
+                    ps.setBigDecimal(6, transaction.getExchangeRate());
+                    ps.setString(7, transaction.getTransactionType());
+                    ps.setString(8, transaction.getStatus());
+                    ps.setLong(9, transaction.getId());
+                }
+        );
+        return transaction;
     }
 
     @Override
-    public void delete(Long id) throws SQLException {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(DELETE_SQL)) {
-
-            ps.setLong(1, id);
-            ps.executeUpdate();
-        }
+    public void delete(Long id) {
+        executeUpdate(
+                DELETE_SQL,
+                ps -> ps.setLong(1, id)
+        );
     }
 
     @Override
-    public Optional<Transaction> findById(Long id) throws SQLException {
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(FIND_BY_ID_SQL)) {
-
-            ps.setLong(1, id);
-            ResultSet rs = ps.executeQuery();
-
-            if (rs.next()) {
-                return Optional.of(mapRow(rs));
-            }
-
-            return Optional.empty();
-        }
+    public Optional<Transaction> findById(Long id) {
+        return executeQuery(
+                FIND_BY_ID_SQL,
+                ps -> ps.setLong(1, id),
+                rs -> {
+                    if (rs.next()) {
+                        return Optional.of(mapRow(rs));
+                    }
+                    return Optional.empty();
+                }
+        );
     }
 
     @Override
-    public List<Transaction> findAll() throws SQLException {
-        List<Transaction> transactions = new ArrayList<>();
-
-        try (Connection con = getConnection();
-             PreparedStatement ps = con.prepareStatement(FIND_ALL_SQL);
-             ResultSet rs = ps.executeQuery()) {
-
-            while (rs.next()) {
-                transactions.add(mapRow(rs));
-            }
-        }
-
-        return transactions;
+    public List<Transaction> findAll() {
+        return executeQuery(
+                FIND_ALL_SQL,
+                ps -> {},
+                rs -> {
+                    List<Transaction> list = new ArrayList<>();
+                    while (rs.next()) {
+                        list.add(mapRow(rs));
+                    }
+                    return list;
+                }
+        );
     }
 
     private Transaction mapRow(ResultSet rs) throws SQLException {
         Transaction transaction = new Transaction();
-
         transaction.setId(rs.getLong("id"));
         transaction.setUserId(rs.getLong("user_id"));
         transaction.setFromCurrencyCode(rs.getString("from_currency_code"));

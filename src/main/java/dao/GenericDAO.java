@@ -5,13 +5,13 @@ import java.util.Optional;
 
 public interface GenericDAO<T, ID> {
 
-    T save(T entity) throws Exception;
+    T save(T entity);
 
-    T update(T entity) throws Exception;
+    T update(T entity);
 
-    void delete(ID id) throws Exception;
+    void delete(ID id);
 
-    Optional<T> findById(ID id) throws Exception;
+    Optional<T> findById(ID id);
 
-    List<T> findAll() throws Exception;
+    List<T> findAll();
 }
