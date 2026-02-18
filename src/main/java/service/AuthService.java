@@ -1,18 +1,21 @@
 package service;
 
+import dao.LoginHistoryDAO;
 import dao.UserDAO;
 import dto.auth.LoginRequestDTO;
 import dto.auth.LoginResponseDTO;
 import dto.auth.RegisterRequestDTO;
 import dto.response.UserResponseDTO;
+import entity.LoginHistory;
 import entity.User;
 import exception.DAOException;
 import exception.ServiceException;
-import jakarta.annotation.PostConstruct;
+import infrastructure.redis.LoginAttemptRateLimiter;
+import infrastructure.redis.UserSessionService;
+import infrastructure.redis.UserLoginCacheService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import at.favre.lib.crypto.bcrypt.BCrypt;
-import redis.clients.jedis.Jedis;
 import mapper.UserMapper;
 
 import java.util.Optional;
@@ -23,70 +26,84 @@ public class AuthService {
     @Inject
     private UserDAO userDAO;
 
-    private Jedis redisClient;
+    @Inject
+    private UserLoginCacheService userCacheService;
 
-    private static final String REDIS_LOGIN_KEY_PREFIX = "user:login:";
+    @Inject
+    private LoginHistoryDAO loginHistoryDAO;
 
-    @PostConstruct
-    public void init() {
-        String redisHost = System.getenv("REDIS_HOST");
-        String redisPortStr = System.getenv("REDIS_PORT");
-        int redisPort = 6379;
-        if (redisPortStr != null) {
-            redisPort = Integer.parseInt(redisPortStr);
-        }
-        redisClient = new Jedis(redisHost != null ? redisHost : "localhost", redisPort);
-    }
+    @Inject
+    private LoginAttemptRateLimiter rateLimitService;
 
-    public LoginResponseDTO login(LoginRequestDTO request) {
+    @Inject
+    private UserSessionService sessionService;
+
+    public LoginResponseDTO login(LoginRequestDTO request, String ipAddress) {
+
+        if (request == null || request.getEmail() == null || request.getPassword() == null)
+            throw new ServiceException("Invalid login request");
+
+        String email = request.getEmail().toLowerCase();
+
         try {
-            String redisKey = REDIS_LOGIN_KEY_PREFIX + request.getEmail();
-            String cachedUserId = redisClient.get(redisKey);
+
+            try {
+                rateLimitService.checkLimit(email);
+            } catch (RuntimeException ex) {
+                throw new ServiceException(ex.getMessage());
+            }
+
             User user;
-
-            if (cachedUserId != null) {
-                Optional<User> optionalUser = userDAO.findById(Long.parseLong(cachedUserId));
-                if (optionalUser.isEmpty()) {
-                    redisClient.del(redisKey);
-                    throw new ServiceException("Cached user bulunamadı");
-                }
-                user = optionalUser.get();
-            } else {
-                Optional<User> optionalUser = userDAO.findByEmail(request.getEmail());
-                if (optionalUser.isEmpty()) {
-                    throw new ServiceException("Kullanıcı bulunamadı");
-                }
-                user = optionalUser.get();
-                redisClient.setex(redisKey, 3600, String.valueOf(user.getId()));
+            try {
+                user = resolveUser(email);
+            } catch (ServiceException ex) {
+                rateLimitService.recordFailure(email);
+                throw ex;
             }
 
-            BCrypt.Result result = BCrypt.verifyer().verify(request.getPassword().toCharArray(), user.getPasswordHash());
+            BCrypt.Result result = BCrypt.verifyer()
+                    .verify(request.getPassword().toCharArray(), user.getPasswordHash());
+
             if (!result.verified) {
-                throw new ServiceException("Geçersiz şifre");
+                rateLimitService.recordFailure(email);
+                throw new ServiceException("Invalid email or password");
             }
 
-            if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
-                throw new ServiceException("Kullanıcı aktif değil");
-            }
+            if (!"ACTIVE".equalsIgnoreCase(user.getStatus()))
+                throw new ServiceException("User is inactive");
 
-            return new LoginResponseDTO(UserMapper.toResponse(user));
+            rateLimitService.reset(email);
+
+            recordLogin(user.getId(), ipAddress);
+
+            String sessionToken = sessionService.createSession(user.getId());
+
+            LoginResponseDTO response = new LoginResponseDTO(UserMapper.toResponse(user));
+            response.setSessionToken(sessionToken);
+            return response;
+
         } catch (DAOException e) {
-            throw new ServiceException("Login sırasında veri tabanı hatası oluştu", e);
+            throw new ServiceException("Login failed", e);
         }
     }
 
     public UserResponseDTO register(RegisterRequestDTO request) {
+
+        if (request == null)
+            throw new ServiceException("Invalid registration request");
+
         try {
-            Optional<User> existingUser = userDAO.findByEmail(request.getEmail());
-            if (existingUser.isPresent()) {
-                throw new ServiceException("Email zaten kullanımda");
-            }
+
+            Optional<User> existing = userDAO.findByEmail(request.getEmail());
+            if (existing.isPresent())
+                throw new ServiceException("Email is already in use");
 
             User user = new User();
             user.setUserName(request.getUsername());
-            user.setEmail(request.getEmail());
-            String hashed = BCrypt.withDefaults().hashToString(12, request.getPassword().toCharArray());
-            user.setPasswordHash(hashed);
+            user.setEmail(request.getEmail().toLowerCase());
+            user.setPasswordHash(
+                    BCrypt.withDefaults().hashToString(12, request.getPassword().toCharArray())
+            );
             user.setFirstName(request.getFirstName());
             user.setLastName(request.getLastName());
             user.setRole("USER");
@@ -94,12 +111,41 @@ public class AuthService {
 
             User saved = userDAO.save(user);
 
-            String redisKey = REDIS_LOGIN_KEY_PREFIX + saved.getEmail();
-            redisClient.setex(redisKey, 3600, String.valueOf(saved.getId()));
+            userCacheService.cacheUserId(saved.getEmail(), saved.getId());
 
             return UserMapper.toResponse(saved);
+
         } catch (DAOException e) {
-            throw new ServiceException("Register sırasında veri tabanı hatası oluştu", e);
+            throw new ServiceException("Registration failed", e);
         }
+    }
+
+    private User resolveUser(String email) {
+
+        Long cachedUserId = userCacheService.getCachedUserId(email);
+
+        if (cachedUserId != null) {
+            Optional<User> user = userDAO.findById(cachedUserId);
+            if (user.isPresent()) {
+                return user.get();
+            }
+            userCacheService.evict(email);
+        }
+
+        Optional<User> optionalUser = userDAO.findByEmail(email);
+        if (optionalUser.isEmpty())
+            throw new ServiceException("Invalid email or password");
+
+        User user = optionalUser.get();
+        userCacheService.cacheUserId(email, user.getId());
+
+        return user;
+    }
+
+    private void recordLogin(Long userId, String ip) {
+        LoginHistory history = new LoginHistory();
+        history.setUserId(userId);
+        history.setIpAddress(ip);
+        loginHistoryDAO.save(history);
     }
 }
