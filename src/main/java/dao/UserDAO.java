@@ -26,6 +26,9 @@ public class UserDAO extends BaseDAO implements GenericDAO<User, Long> {
     private static final String FIND_BY_ID_SQL =
             "SELECT * FROM users WHERE id=?";
 
+    private static final String FIND_BY_EMAIL_SQL =
+            "SELECT * FROM users WHERE email=?";
+
     private static final String FIND_ALL_SQL =
             "SELECT * FROM users ORDER BY id";
 
@@ -100,6 +103,19 @@ public class UserDAO extends BaseDAO implements GenericDAO<User, Long> {
         );
     }
 
+    public Optional<User> findByEmail(String email) {
+        return executeQuery(
+                FIND_BY_EMAIL_SQL,
+                ps -> ps.setString(1, email),
+                rs -> {
+                    if (rs.next()) {
+                        return Optional.of(mapRow(rs));
+                    }
+                    return Optional.empty();
+                }
+        );
+    }
+
     @Override
     public List<User> findAll() {
         return executeQuery(
@@ -125,17 +141,14 @@ public class UserDAO extends BaseDAO implements GenericDAO<User, Long> {
         user.setLastName(rs.getString("last_name"));
         user.setRole(rs.getString("role"));
         user.setStatus(rs.getString("status"));
-
         Timestamp created = rs.getTimestamp("created_at");
         if (created != null) {
             user.setCreatedAt(created.toLocalDateTime());
         }
-
         Timestamp updated = rs.getTimestamp("updated_at");
         if (updated != null) {
             user.setUpdatedAt(updated.toLocalDateTime());
         }
-
         return user;
     }
 }
