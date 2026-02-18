@@ -52,4 +52,33 @@ public abstract class BaseDAO {
             throw new DAOException("Database query error", e);
         }
     }
+    
+    protected int executeUpdate(Connection con, String sql, SQLConsumer<PreparedStatement> setter) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+
+            setter.accept(ps);
+            return ps.executeUpdate();
+
+        } catch (SQLException e) {
+            throw new DAOException("Database update error", e);
+        }
+    }
+
+    protected <T> T executeQuery(Connection con,
+                                 String sql,
+                                 SQLConsumer<PreparedStatement> setter,
+                                 SQLFunction<ResultSet, T> extractor) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+
+            setter.accept(ps);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                return extractor.apply(rs);
+            }
+
+        } catch (SQLException e) {
+            throw new DAOException("Database query error", e);
+        }
+    }
+
 }

@@ -3,6 +3,7 @@ package dao;
 import entity.Withdrawal;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -51,6 +52,30 @@ public class WithdrawalDAO extends BaseDAO implements GenericDAO<Withdrawal, Lon
         withdrawal.setId(id);
         return withdrawal;
     }
+    
+    public Withdrawal save(Connection con, Withdrawal withdrawal) {
+        Long id = executeQuery(
+                con,
+                INSERT_SQL,
+                ps -> {
+                    ps.setLong(1, withdrawal.getUserId());
+                    ps.setString(2, withdrawal.getCurrencyCode());
+                    ps.setBigDecimal(3, withdrawal.getAmount());
+                    ps.setString(4, withdrawal.getIban());
+                    ps.setString(5, withdrawal.getStatus());
+                },
+                rs -> {
+                    if (rs.next()) {
+                        return rs.getLong("id");
+                    }
+                    return null;
+                }
+        );
+
+        withdrawal.setId(id);
+        return withdrawal;
+    }
+
 
     @Override
     public Withdrawal update(Withdrawal withdrawal) {

@@ -3,6 +3,7 @@ package dao;
 import entity.Deposit;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -52,6 +53,27 @@ public class DepositDAO extends BaseDAO implements GenericDAO<Deposit, Long> {
         deposit.setId(id);
         return deposit;
     }
+    
+    public Deposit save(Connection con, Deposit deposit) {
+        Long id = executeQuery(con,
+                INSERT_SQL,
+                ps -> {
+                    ps.setLong(1, deposit.getUserId());
+                    ps.setString(2, deposit.getCurrencyCode());
+                    ps.setBigDecimal(3, deposit.getAmount());
+                    ps.setString(4, deposit.getMethod());
+                    ps.setString(5, deposit.getStatus());
+                },
+                rs -> {
+                    if (rs.next()) return rs.getLong("id");
+                    return null;
+                }
+        );
+
+        deposit.setId(id);
+        return deposit;
+    }
+
 
     @Override
     public Deposit update(Deposit deposit) {

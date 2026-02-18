@@ -11,14 +11,15 @@ public class UserMapper {
         if (user == null) return null;
 
         return new UserResponseDTO(
-                user.getId(),
-                user.getFirstName(),
-                user.getEmail(),
-                user.getFirstName(),
-                user.getLastName(),
-                user.getRole(),
-                user.getStatus(),
-                user.getCreatedAt()
+        	    user.getId(),
+        	    user.getUserName(),
+        	    user.getEmail(),
+        	    user.getFirstName(),
+        	    user.getLastName(),
+        	    user.getRole(),
+        	    user.getStatus(),
+        	    user.getCreatedAt()
         );
+
     }
 }

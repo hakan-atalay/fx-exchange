@@ -3,6 +3,7 @@ package dao;
 import entity.Transaction;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -57,7 +58,32 @@ public class TransactionDAO extends BaseDAO implements GenericDAO<Transaction, L
         transaction.setId(id);
         return transaction;
     }
+    
+    public Transaction save(Connection con, Transaction transaction) {
+        Long id = executeQuery(
+                con,
+                INSERT_SQL,
+                ps -> {
+                    ps.setLong(1, transaction.getUserId());
+                    ps.setString(2, transaction.getFromCurrencyCode());
+                    ps.setString(3, transaction.getToCurrencyCode());
+                    ps.setBigDecimal(4, transaction.getAmountFrom());
+                    ps.setBigDecimal(5, transaction.getAmountTo());
+                    ps.setBigDecimal(6, transaction.getExchangeRate());
+                    ps.setString(7, transaction.getTransactionType());
+                    ps.setString(8, transaction.getStatus());
+                },
+                rs -> {
+                    if (rs.next()) return rs.getLong("id");
+                    return null;
+                }
+        );
+        transaction.setId(id);
+        return transaction;
+    }
 
+
+    
     @Override
     public Transaction update(Transaction transaction) {
         executeUpdate(

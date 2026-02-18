@@ -37,14 +37,8 @@ public class ExchangeRateDAO extends BaseDAO implements GenericDAO<ExchangeRate,
                     ps.setBigDecimal(3, rate.getRate());
                     ps.setString(4, rate.getSource());
                 },
-                rs -> {
-                    if (rs.next()) {
-                        return rs.getLong("id");
-                    }
-                    return null;
-                }
+                rs -> rs.next() ? rs.getLong("id") : null
         );
-
         rate.setId(id);
         return rate;
     }
@@ -75,12 +69,7 @@ public class ExchangeRateDAO extends BaseDAO implements GenericDAO<ExchangeRate,
         return executeQuery(
                 FIND_BY_ID_SQL,
                 ps -> ps.setLong(1, id),
-                rs -> {
-                    if (rs.next()) {
-                        return Optional.of(mapRow(rs));
-                    }
-                    return Optional.empty();
-                }
+                rs -> rs.next() ? Optional.of(mapRow(rs)) : Optional.empty()
         );
     }
 
@@ -99,6 +88,18 @@ public class ExchangeRateDAO extends BaseDAO implements GenericDAO<ExchangeRate,
         );
     }
 
+    public Optional<ExchangeRate> findByBaseAndTarget(String baseCurrency, String targetCurrency) {
+        String sql = "SELECT * FROM exchange_rates WHERE base_currency_code=? AND target_currency_code=?";
+        return executeQuery(
+                sql,
+                ps -> {
+                    ps.setString(1, baseCurrency.toUpperCase());
+                    ps.setString(2, targetCurrency.toUpperCase());
+                },
+                rs -> rs.next() ? Optional.of(mapRow(rs)) : Optional.empty()
+        );
+    }
+
     private ExchangeRate mapRow(ResultSet rs) throws SQLException {
         ExchangeRate rate = new ExchangeRate();
         rate.setId(rs.getLong("id"));
@@ -106,11 +107,9 @@ public class ExchangeRateDAO extends BaseDAO implements GenericDAO<ExchangeRate,
         rate.setTargetCurrencyCode(rs.getString("target_currency_code"));
         rate.setRate(rs.getBigDecimal("rate"));
         rate.setSource(rs.getString("source"));
-
         if (rs.getTimestamp("fetched_at") != null) {
             rate.setFetchedAt(rs.getTimestamp("fetched_at").toLocalDateTime());
         }
-
         return rate;
     }
 }
