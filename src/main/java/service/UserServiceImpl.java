@@ -13,7 +13,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class UserService {
+public class UserServiceImpl {
 
     @Inject
     private UserDAO userDAO;

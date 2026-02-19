@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class WalletService {
+public class WalletServiceImpl {
 
     @Inject
     private WalletDAO walletDAO;

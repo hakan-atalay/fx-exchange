@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 @ApplicationScoped
-public class ExchangeRateService {
+public class ExchangeRateServiceImpl {
 
     @Inject
     private ExchangeRateDAO exchangeRateDAO;

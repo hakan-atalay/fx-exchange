@@ -15,7 +15,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 
 @ApplicationScoped
-public class WithdrawalService {
+public class WithdrawalServiceImpl {
 
     @Inject
     private WalletDAO walletDAO;

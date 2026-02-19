@@ -19,7 +19,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 
 @ApplicationScoped
-public class ExchangeService {
+public class ExchangeServiceImpl {
 
     @Inject
     private WalletDAO walletDAO;

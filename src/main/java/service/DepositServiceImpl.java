@@ -14,7 +14,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 
 @ApplicationScoped
-public class DepositService {
+public class DepositServiceImpl {
 
     @Inject
     private WalletDAO walletDAO;

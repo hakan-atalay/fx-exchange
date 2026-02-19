@@ -21,7 +21,7 @@ import mapper.UserMapper;
 import java.util.Optional;
 
 @ApplicationScoped
-public class AuthService {
+public class AuthServiceImpl {
 
     @Inject
     private UserDAO userDAO;
