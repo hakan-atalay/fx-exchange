@@ -2,7 +2,7 @@ package service;
 
 import dao.TransactionDAO;
 import dao.WalletDAO;
-import dto.request.ExchangeRequestDTO;
+import dto.request.ExchangeCreateDTO;
 import dto.response.TransactionResponseDTO;
 import entity.Transaction;
 import entity.Wallet;
@@ -21,89 +21,88 @@ import java.time.LocalDateTime;
 @ApplicationScoped
 public class ExchangeServiceImpl {
 
-    @Inject
-    private WalletDAO walletDAO;
+	@Inject
+	private WalletDAO walletDAO;
 
-    @Inject
-    private TransactionDAO transactionDAO;
+	@Inject
+	private TransactionDAO transactionDAO;
 
-    @Inject
-    private DataSource dataSource;
+	@Inject
+	private DataSource dataSource;
 
-    public TransactionResponseDTO exchange(Long userId,
-                                           ExchangeRequestDTO request,
-                                           BigDecimal rate) {
+	public TransactionResponseDTO exchange(Long userId, ExchangeCreateDTO request, BigDecimal rate) {
+		validateRequest(userId, request, rate);
 
-        if (userId == null || userId <= 0)
-            throw new ServiceException("User id is required");
+		String fromCurrency = request.getFromCurrencyCode().toUpperCase();
+		String toCurrency = request.getToCurrencyCode().toUpperCase();
+		BigDecimal amountFrom = request.getAmount();
+		BigDecimal amountTo = calculateAmountTo(amountFrom, rate);
 
-        if (request == null)
-            throw new ServiceException("Exchange request is required");
+		try (Connection con = dataSource.getConnection()) {
+			con.setAutoCommit(false);
+			con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
-        if (request.getAmount() == null ||
-                request.getAmount().compareTo(BigDecimal.ZERO) <= 0)
-            throw new ServiceException("Amount must be positive");
+			Wallet fromWallet = walletDAO.lockWallet(con, userId, fromCurrency);
+			Wallet toWallet = walletDAO.lockWallet(con, userId, toCurrency);
 
-        if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0)
-            throw new ServiceException("Rate must be positive");
+			checkBalance(fromWallet, amountFrom);
 
-        String fromCurrency = request.getFromCurrencyCode();
-        String toCurrency = request.getToCurrencyCode();
+			performWalletExchange(con, userId, fromCurrency, toCurrency, amountFrom, amountTo);
 
-        if (fromCurrency == null || toCurrency == null ||
-                fromCurrency.equalsIgnoreCase(toCurrency))
-            throw new ServiceException("Invalid currency pair");
+			Transaction tx = createTransaction(userId, fromCurrency, toCurrency, amountFrom, amountTo, rate);
+			transactionDAO.save(con, tx);
 
-        fromCurrency = fromCurrency.toUpperCase();
-        toCurrency = toCurrency.toUpperCase();
+			con.commit();
+			return TransactionMapper.toResponse(tx);
 
-        BigDecimal amountFrom = request.getAmount();
-        BigDecimal amountTo = amountFrom
-                .multiply(rate)
-                .setScale(4, RoundingMode.HALF_UP);
+		} catch (Exception e) {
+			throw e instanceof ServiceException ? (ServiceException) e : new ServiceException("Exchange failed", e);
+		}
+	}
 
-        try (Connection con = dataSource.getConnection()) {
+	private void validateRequest(Long userId, ExchangeCreateDTO request, BigDecimal rate) {
+		if (userId == null || userId <= 0)
+			throw new ServiceException("User id is required");
+		if (request == null)
+			throw new ServiceException("Exchange request is required");
+		if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0)
+			throw new ServiceException("Amount must be positive");
+		if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0)
+			throw new ServiceException("Rate must be positive");
 
-            con.setAutoCommit(false);
-            con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+		String from = request.getFromCurrencyCode();
+		String to = request.getToCurrencyCode();
+		if (from == null || to == null || from.equalsIgnoreCase(to))
+			throw new ServiceException("Invalid currency pair");
+	}
 
-            try {
+	private BigDecimal calculateAmountTo(BigDecimal amountFrom, BigDecimal rate) {
+		return amountFrom.multiply(rate).setScale(4, RoundingMode.HALF_UP);
+	}
 
-                Wallet fromWallet = walletDAO.lockWallet(con, userId, fromCurrency);
-                Wallet toWallet = walletDAO.lockWallet(con, userId, toCurrency);
+	private void checkBalance(Wallet fromWallet, BigDecimal amountFrom) {
+		if (fromWallet.getBalance().compareTo(amountFrom) < 0)
+			throw new ServiceException("Insufficient balance");
+	}
 
-                if (fromWallet.getBalance().compareTo(amountFrom) < 0)
-                    throw new ServiceException("Insufficient balance");
+	private void performWalletExchange(Connection con, Long userId, String fromCurrency, String toCurrency,
+			BigDecimal amountFrom, BigDecimal amountTo) throws SQLException {
+		walletDAO.atomicDebit(con, userId, fromCurrency, amountFrom);
+		walletDAO.atomicCredit(con, userId, toCurrency, amountTo);
+	}
 
-                walletDAO.atomicDebit(con, userId, fromCurrency, amountFrom);
-                walletDAO.atomicCredit(con, userId, toCurrency, amountTo);
-
-                Transaction tx = new Transaction();
-                tx.setUserId(userId);
-                tx.setFromCurrencyCode(fromCurrency);
-                tx.setToCurrencyCode(toCurrency);
-                tx.setAmountFrom(amountFrom);
-                tx.setAmountTo(amountTo);
-                tx.setExchangeRate(rate);
-                tx.setTransactionType("EXCHANGE");
-                tx.setStatus("COMPLETED");
-                tx.setCreatedAt(LocalDateTime.now());
-
-                transactionDAO.save(con, tx);
-
-                con.commit();
-
-                return TransactionMapper.toResponse(tx);
-
-            } catch (Exception e) {
-                con.rollback();
-                throw e instanceof ServiceException
-                        ? (ServiceException) e
-                        : new ServiceException("Exchange failed", e);
-            }
-
-        } catch (SQLException e) {
-            throw new ServiceException("Exchange failed", e);
-        }
-    }
+	private Transaction createTransaction(Long userId, String fromCurrency, String toCurrency, BigDecimal amountFrom,
+			BigDecimal amountTo, BigDecimal rate) {
+		Transaction tx = new Transaction();
+		tx.setUserId(userId);
+		tx.setFromCurrencyCode(fromCurrency);
+		tx.setToCurrencyCode(toCurrency);
+		tx.setAmountFrom(amountFrom);
+		tx.setAmountTo(amountTo);
+		tx.setExchangeRate(rate);
+		tx.setTransactionType("EXCHANGE");
+		tx.setStatus("COMPLETED");
+		tx.setCreatedAt(LocalDateTime.now());
+		return tx;
+	}
 }

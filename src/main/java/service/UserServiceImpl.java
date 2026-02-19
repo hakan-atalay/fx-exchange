@@ -1,6 +1,7 @@
 package service;
 
 import dao.UserDAO;
+import dto.request.UserUpdateDTO;
 import dto.response.UserResponseDTO;
 import entity.User;
 import exception.ServiceException;
@@ -32,19 +33,18 @@ public class UserServiceImpl {
                 .collect(Collectors.toList());
     }
 
-    public UserResponseDTO updateUser(Long userId, String firstName, String lastName, String role, String status) {
+    public UserResponseDTO updateUser(Long userId, UserUpdateDTO updateDTO) {
         validateUserId(userId);
         Optional<User> optionalUser = userDAO.findById(userId);
         if (optionalUser.isEmpty()) throw new ServiceException("User not found");
 
         User user = optionalUser.get();
-        if (firstName != null) user.setFirstName(firstName);
-        if (lastName != null) user.setLastName(lastName);
-        if (role != null) user.setRole(role);
-        if (status != null) user.setStatus(status);
+        if (updateDTO.getFirstName() != null) user.setFirstName(updateDTO.getFirstName());
+        if (updateDTO.getLastName() != null) user.setLastName(updateDTO.getLastName());
+        if (updateDTO.getRole() != null) user.setRole(updateDTO.getRole());
+        if (updateDTO.getStatus() != null) user.setStatus(updateDTO.getStatus());
 
         userDAO.update(user);
-
         return UserMapper.toResponse(user);
     }
 

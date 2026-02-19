@@ -2,15 +2,15 @@ package dto.request;
 
 import java.math.BigDecimal;
 
-public class DepositRequestDTO {
+public class DepositCreateDTO {
 
     private String currencyCode;
     private BigDecimal amount;
     private String method;
 
-    public DepositRequestDTO() {}
+    public DepositCreateDTO() {}
 
-    public DepositRequestDTO(String currencyCode, BigDecimal amount, String method) {
+    public DepositCreateDTO(String currencyCode, BigDecimal amount, String method) {
         this.currencyCode = currencyCode;
         this.amount = amount;
         this.method = method;

@@ -2,6 +2,7 @@ package service;
 
 import dao.WalletDAO;
 import dao.WithdrawalDAO;
+import dto.request.WithdrawalCreateDTO;
 import dto.response.WithdrawalResponseDTO;
 import entity.Withdrawal;
 import exception.ServiceException;
@@ -9,7 +10,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
-import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -17,74 +17,56 @@ import java.time.LocalDateTime;
 @ApplicationScoped
 public class WithdrawalServiceImpl {
 
-    @Inject
-    private WalletDAO walletDAO;
+	@Inject
+	private WalletDAO walletDAO;
 
-    @Inject
-    private WithdrawalDAO withdrawalDAO;
+	@Inject
+	private WithdrawalDAO withdrawalDAO;
 
-    @Inject
-    private DataSource dataSource;
+	@Inject
+	private DataSource dataSource;
 
-    public WithdrawalResponseDTO withdraw(Long userId,
-                                          String currencyCode,
-                                          BigDecimal amount,
-                                          String iban) {
+	public WithdrawalResponseDTO withdraw(Long userId, WithdrawalCreateDTO request) {
+		validateRequest(userId, request);
 
-        validateInput(userId, currencyCode, amount);
+		try (Connection con = dataSource.getConnection()) {
+			con.setAutoCommit(false);
 
-        try (Connection con = dataSource.getConnection()) {
+			boolean debited = walletDAO.atomicDebit(con, userId, request.getCurrencyCode().toUpperCase(),
+					request.getAmount());
+			if (!debited)
+				throw new ServiceException("Insufficient balance");
 
-            con.setAutoCommit(false);
+			Withdrawal withdrawal = new Withdrawal();
+			withdrawal.setUserId(userId);
+			withdrawal.setCurrencyCode(request.getCurrencyCode().toUpperCase());
+			withdrawal.setAmount(request.getAmount());
+			withdrawal.setIban(request.getIban());
+			withdrawal.setStatus("COMPLETED");
+			withdrawal.setCreatedAt(LocalDateTime.now());
 
-            try {
+			withdrawalDAO.save(con, withdrawal);
 
-                boolean success = walletDAO.atomicDebit(con, userId, currencyCode.toUpperCase(), amount);
-                if (!success) throw new ServiceException("Insufficient balance");
+			con.commit();
 
-                Withdrawal withdrawal = buildWithdrawal(userId, currencyCode, amount, iban);
-                withdrawalDAO.save(con, withdrawal);
+			return new WithdrawalResponseDTO(withdrawal.getId(), withdrawal.getCurrencyCode(), withdrawal.getAmount(),
+					withdrawal.getIban(), withdrawal.getStatus(), withdrawal.getCreatedAt());
 
-                con.commit();
+		} catch (SQLException e) {
+			throw new ServiceException("Database error during withdrawal", e);
+		} catch (Exception e) {
+			throw new ServiceException("Withdrawal transaction failed", e);
+		}
+	}
 
-                return mapToDTO(withdrawal);
-
-            } catch (Exception e) {
-                con.rollback();
-                throw new ServiceException("Withdrawal transaction failed", e);
-            }
-
-        } catch (SQLException e) {
-            throw new ServiceException("Database connection error during withdrawal", e);
-        }
-    }
-
-    private void validateInput(Long userId, String currencyCode, BigDecimal amount) {
-        if (userId == null || userId <= 0) throw new ServiceException("Invalid user ID");
-        if (currencyCode == null || currencyCode.isBlank()) throw new ServiceException("Invalid currency code");
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0)
-            throw new ServiceException("Amount must be greater than zero");
-    }
-
-    private Withdrawal buildWithdrawal(Long userId, String currencyCode, BigDecimal amount, String iban) {
-        Withdrawal w = new Withdrawal();
-        w.setUserId(userId);
-        w.setCurrencyCode(currencyCode.toUpperCase());
-        w.setAmount(amount);
-        w.setIban(iban);
-        w.setStatus("COMPLETED");
-        w.setCreatedAt(LocalDateTime.now());
-        return w;
-    }
-
-    private WithdrawalResponseDTO mapToDTO(Withdrawal w) {
-        return new WithdrawalResponseDTO(
-                w.getId(),
-                w.getCurrencyCode(),
-                w.getAmount(),
-                w.getIban(),
-                w.getStatus(),
-                w.getCreatedAt()
-        );
-    }
+	private void validateRequest(Long userId, WithdrawalCreateDTO request) {
+		if (userId == null || userId <= 0)
+			throw new ServiceException("Invalid user ID");
+		if (request == null)
+			throw new ServiceException("Withdrawal request is required");
+		if (request.getCurrencyCode() == null || request.getCurrencyCode().isBlank())
+			throw new ServiceException("Invalid currency code");
+		if (request.getAmount() == null || request.getAmount().compareTo(java.math.BigDecimal.ZERO) <= 0)
+			throw new ServiceException("Amount must be greater than zero");
+	}
 }

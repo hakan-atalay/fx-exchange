@@ -2,15 +2,15 @@ package dto.request;
 
 import java.math.BigDecimal;
 
-public class ExchangeRequestDTO {
+public class ExchangeCreateDTO {
 
     private String fromCurrencyCode;
     private String toCurrencyCode;
     private BigDecimal amount;
 
-    public ExchangeRequestDTO() {}
+    public ExchangeCreateDTO() {}
 
-    public ExchangeRequestDTO(String fromCurrencyCode,
+    public ExchangeCreateDTO(String fromCurrencyCode,
                               String toCurrencyCode,
                               BigDecimal amount) {
         this.fromCurrencyCode = fromCurrencyCode;

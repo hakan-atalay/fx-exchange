@@ -2,15 +2,15 @@ package dto.request;
 
 import java.math.BigDecimal;
 
-public class WithdrawalRequestDTO {
+public class WithdrawalCreateDTO {
 
     private String currencyCode;
     private BigDecimal amount;
     private String iban;
 
-    public WithdrawalRequestDTO() {}
+    public WithdrawalCreateDTO() {}
 
-    public WithdrawalRequestDTO(String currencyCode, BigDecimal amount, String iban) {
+    public WithdrawalCreateDTO(String currencyCode, BigDecimal amount, String iban) {
         this.currencyCode = currencyCode;
         this.amount = amount;
         this.iban = iban;

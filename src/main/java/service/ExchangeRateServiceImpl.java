@@ -1,48 +1,57 @@
 package service;
 
 import dao.ExchangeRateDAO;
+import dto.request.ExcangeRateCreateDTO;
+import dto.response.ExchangeRateResponseDTO;
 import entity.ExchangeRate;
 import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import mapper.ExchangeRateMapper;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 @ApplicationScoped
 public class ExchangeRateServiceImpl {
 
-    @Inject
-    private ExchangeRateDAO exchangeRateDAO;
+	@Inject
+	private ExchangeRateDAO exchangeRateDAO;
 
-    public ExchangeRate getOrFetchRate(String baseCurrency, String targetCurrency, BigDecimal rate, String source) {
-        if (baseCurrency == null || targetCurrency == null || baseCurrency.equalsIgnoreCase(targetCurrency))
-            throw new ServiceException("Invalid currency pair");
+	public ExchangeRateResponseDTO createOrUpdateRate(ExcangeRateCreateDTO request) {
+		validateRequest(request);
 
-        baseCurrency = baseCurrency.toUpperCase();
-        targetCurrency = targetCurrency.toUpperCase();
+		String baseCurrency = request.getBaseCurrency().toUpperCase();
+		String targetCurrency = request.getTargetCurrency().toUpperCase();
 
-        Optional<ExchangeRate> existing = exchangeRateDAO.findByBaseAndTarget(baseCurrency, targetCurrency);
+		Optional<ExchangeRate> existingRate = exchangeRateDAO.findByBaseAndTarget(baseCurrency, targetCurrency);
 
-        if (existing.isPresent()) {
-            ExchangeRate ex = existing.get();
-            if (rate != null) {
-                ex.setRate(rate);
-                ex.setSource(source);
-                ex.setFetchedAt(LocalDateTime.now());
-                exchangeRateDAO.update(ex);
-            }
-            return ex;
-        }
+		ExchangeRate rateEntity = existingRate.map(rate -> {
+			if (request.getRate() != null) {
+				rate.setRate(request.getRate());
+				rate.setSource(request.getSource());
+				rate.setFetchedAt(LocalDateTime.now());
+				exchangeRateDAO.update(rate);
+			}
+			return rate;
+		}).orElseGet(() -> {
+			ExchangeRate newRate = new ExchangeRate();
+			newRate.setBaseCurrencyCode(baseCurrency);
+			newRate.setTargetCurrencyCode(targetCurrency);
+			newRate.setRate(request.getRate());
+			newRate.setSource(request.getSource());
+			newRate.setFetchedAt(LocalDateTime.now());
+			return exchangeRateDAO.save(newRate);
+		});
 
-        ExchangeRate newRate = new ExchangeRate();
-        newRate.setBaseCurrencyCode(baseCurrency);
-        newRate.setTargetCurrencyCode(targetCurrency);
-        newRate.setRate(rate);
-        newRate.setSource(source);
-        newRate.setFetchedAt(LocalDateTime.now());
+		return ExchangeRateMapper.toResponse(rateEntity);
+	}
 
-        return exchangeRateDAO.save(newRate);
-    }
+	private void validateRequest(ExcangeRateCreateDTO request) {
+		if (request == null)
+			throw new ServiceException("Exchange rate request is required");
+		if (request.getBaseCurrency() == null || request.getTargetCurrency() == null
+				|| request.getBaseCurrency().equalsIgnoreCase(request.getTargetCurrency()))
+			throw new ServiceException("Invalid currency pair");
+	}
 }

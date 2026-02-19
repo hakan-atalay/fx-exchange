@@ -1,6 +1,7 @@
 package service;
 
 import dao.WalletDAO;
+import dto.request.WalletCreateDTO;
 import dto.response.WalletResponseDTO;
 import entity.Wallet;
 import exception.ServiceException;
@@ -24,18 +25,18 @@ public class WalletServiceImpl {
     @Inject
     private DataSource dataSource;
 
-    public WalletResponseDTO createWallet(Long userId, String currencyCode) {
+    public WalletResponseDTO createWallet(Long userId, WalletCreateDTO request) {
         validateUserId(userId);
-        validateCurrency(currencyCode);
+        validateCurrency(request.getCurrencyCode());
 
-        walletDAO.findByUserIdAndCurrency(userId, currencyCode.toUpperCase())
+        walletDAO.findByUserIdAndCurrency(userId, request.getCurrencyCode().toUpperCase())
                 .ifPresent(w -> {
-                    throw new ServiceException("Wallet already exists for currency: " + currencyCode);
+                    throw new ServiceException("Wallet already exists for currency: " + request.getCurrencyCode());
                 });
 
         Wallet wallet = new Wallet();
         wallet.setUserId(userId);
-        wallet.setCurrencyCode(currencyCode.toUpperCase());
+        wallet.setCurrencyCode(request.getCurrencyCode().toUpperCase());
         wallet.setBalance(BigDecimal.ZERO);
 
         Wallet saved = walletDAO.save(wallet);
@@ -68,22 +69,12 @@ public class WalletServiceImpl {
         validateAmount(amount);
 
         try (Connection con = dataSource.getConnection()) {
-
             con.setAutoCommit(false);
             con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
-            try {
+            walletDAO.atomicCredit(con, userId, currencyCode.toUpperCase(), amount);
 
-                walletDAO.atomicCredit(con, userId, currencyCode.toUpperCase(), amount);
-
-                con.commit();
-
-            } catch (Exception e) {
-                con.rollback();
-                throw e instanceof ServiceException
-                        ? (ServiceException) e
-                        : new ServiceException("Credit failed", e);
-            }
+            con.commit();
 
         } catch (SQLException e) {
             throw new ServiceException("Credit failed", e);
@@ -96,22 +87,12 @@ public class WalletServiceImpl {
         validateAmount(amount);
 
         try (Connection con = dataSource.getConnection()) {
-
             con.setAutoCommit(false);
             con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
-            try {
+            walletDAO.atomicDebit(con, userId, currencyCode.toUpperCase(), amount);
 
-                walletDAO.atomicDebit(con, userId, currencyCode.toUpperCase(), amount);
-
-                con.commit();
-
-            } catch (Exception e) {
-                con.rollback();
-                throw e instanceof ServiceException
-                        ? (ServiceException) e
-                        : new ServiceException("Debit failed", e);
-            }
+            con.commit();
 
         } catch (SQLException e) {
             throw new ServiceException("Debit failed", e);
