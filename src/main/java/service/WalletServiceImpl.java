@@ -8,6 +8,7 @@ import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import mapper.WalletMapper;
+import service.interfaces.WalletService;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
@@ -17,7 +18,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class WalletServiceImpl {
+public class WalletServiceImpl implements WalletService {
 
     @Inject
     private WalletDAO walletDAO;

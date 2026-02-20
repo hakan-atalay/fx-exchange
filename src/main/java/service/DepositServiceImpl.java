@@ -14,9 +14,10 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import mapper.DepositMapper;
+import service.interfaces.DepositService;
 
 @ApplicationScoped
-public class DepositServiceImpl {
+public class DepositServiceImpl implements DepositService{
 
 	@Inject
 	private WalletDAO walletDAO;

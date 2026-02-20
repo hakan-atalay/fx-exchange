@@ -8,13 +8,14 @@ import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import mapper.UserMapper;
+import service.interfaces.UserService;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class UserServiceImpl {
+public class UserServiceImpl implements UserService{
 
     @Inject
     private UserDAO userDAO;

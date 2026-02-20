@@ -8,12 +8,14 @@ import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import mapper.ExchangeRateMapper;
+import service.interfaces.ExchangeRateService;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 @ApplicationScoped
-public class ExchangeRateServiceImpl {
+public class ExchangeRateServiceImpl implements ExchangeRateService{
 
 	@Inject
 	private ExchangeRateDAO exchangeRateDAO;
@@ -53,5 +55,17 @@ public class ExchangeRateServiceImpl {
 		if (request.getBaseCurrency() == null || request.getTargetCurrency() == null
 				|| request.getBaseCurrency().equalsIgnoreCase(request.getTargetCurrency()))
 			throw new ServiceException("Invalid currency pair");
+	}
+	
+	public BigDecimal getRate(String base, String target) {
+
+	    if (base == null || target == null || base.equalsIgnoreCase(target))
+	        throw new ServiceException("Invalid currency pair");
+
+	    return exchangeRateDAO
+	            .findByBaseAndTarget(base.toUpperCase(), target.toUpperCase())
+	            .map(ExchangeRate::getRate)
+	            .orElseThrow(() ->
+	                    new ServiceException("Exchange rate not available"));
 	}
 }

@@ -1,5 +1,6 @@
 package service.interfaces;
 
+import dto.request.WalletCreateDTO;
 import dto.response.WalletResponseDTO;
 
 import java.math.BigDecimal;
@@ -7,7 +8,7 @@ import java.util.List;
 
 public interface WalletService {
 	
-	WalletResponseDTO createWallet(Long userId, String currencyCode);
+	WalletResponseDTO createWallet(Long userId, WalletCreateDTO request);
 
 	List<WalletResponseDTO> getUserWallets(Long userId);
 

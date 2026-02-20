@@ -6,12 +6,13 @@ import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import mapper.TransactionMapper;
+import service.interfaces.TransactionService;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class TransactionServiceImpl {
+public class TransactionServiceImpl implements TransactionService{
 
 	@Inject
 	private TransactionDAO transactionDAO;

@@ -1,9 +1,13 @@
 package service.interfaces;
 
-import entity.ExchangeRate;
 import java.math.BigDecimal;
 
+import dto.request.ExcangeRateCreateDTO;
+import dto.response.ExchangeRateResponseDTO;
+
 public interface ExchangeRateService {
-	
-	ExchangeRate getOrFetchRate(String baseCurrency, String targetCurrency, BigDecimal rate, String source);
+
+	ExchangeRateResponseDTO createOrUpdateRate(ExcangeRateCreateDTO request);
+
+	BigDecimal getRate(String base, String target);
 }

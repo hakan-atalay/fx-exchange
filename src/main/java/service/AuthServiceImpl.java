@@ -17,11 +17,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import at.favre.lib.crypto.bcrypt.BCrypt;
 import mapper.UserMapper;
+import service.interfaces.AuthService;
 
 import java.util.Optional;
 
 @ApplicationScoped
-public class AuthServiceImpl {
+public class AuthServiceImpl implements AuthService{
 
     @Inject
     private UserDAO userDAO;

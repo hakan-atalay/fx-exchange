@@ -1,8 +1,9 @@
 package service.interfaces;
 
-import java.math.BigDecimal;
+import dto.request.DepositCreateDTO;
+import dto.response.DepositResponseDTO;
 
 public interface DepositService {
-	
-	void deposit(Long userId, String currencyCode, BigDecimal amount, String method);
+
+	DepositResponseDTO deposit(Long userId, DepositCreateDTO depositDTO);
 }

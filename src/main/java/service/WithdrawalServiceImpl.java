@@ -8,6 +8,7 @@ import entity.Withdrawal;
 import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import service.interfaces.WithdrawalService;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -15,7 +16,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 
 @ApplicationScoped
-public class WithdrawalServiceImpl {
+public class WithdrawalServiceImpl implements WithdrawalService{
 
 	@Inject
 	private WalletDAO walletDAO;

@@ -10,6 +10,7 @@ import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import mapper.TransactionMapper;
+import service.interfaces.ExchangeService;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
@@ -19,7 +20,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 
 @ApplicationScoped
-public class ExchangeServiceImpl {
+public class ExchangeServiceImpl implements ExchangeService{
 
 	@Inject
 	private WalletDAO walletDAO;
