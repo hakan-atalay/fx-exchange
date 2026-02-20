@@ -9,8 +9,9 @@ import entity.Wallet;
 import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import mapper.TransactionMapper;
 import service.interfaces.ExchangeService;
+import service.interfaces.ExchangeRateService;
+import mapper.TransactionMapper;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
@@ -20,90 +21,99 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 
 @ApplicationScoped
-public class ExchangeServiceImpl implements ExchangeService{
+public class ExchangeServiceImpl implements ExchangeService {
 
-	@Inject
-	private WalletDAO walletDAO;
+    @Inject
+    private WalletDAO walletDAO;
 
-	@Inject
-	private TransactionDAO transactionDAO;
+    @Inject
+    private TransactionDAO transactionDAO;
 
-	@Inject
-	private DataSource dataSource;
+    @Inject
+    private ExchangeRateService exchangeRateService;
 
-	public TransactionResponseDTO exchange(Long userId, ExchangeCreateDTO request, BigDecimal rate) {
-		validateRequest(userId, request, rate);
+    @Inject
+    private DataSource dataSource;
 
-		String fromCurrency = request.getFromCurrencyCode().toUpperCase();
-		String toCurrency = request.getToCurrencyCode().toUpperCase();
-		BigDecimal amountFrom = request.getAmount();
-		BigDecimal amountTo = calculateAmountTo(amountFrom, rate);
+    @Override
+    public TransactionResponseDTO exchange(Long userId, ExchangeCreateDTO request) {
+        validateRequest(userId, request);
 
-		try (Connection con = dataSource.getConnection()) {
-			con.setAutoCommit(false);
-			con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        String fromCurrency = request.getFromCurrencyCode().toUpperCase();
+        String toCurrency = request.getToCurrencyCode().toUpperCase();
+        BigDecimal amountFrom = request.getAmount();
 
-			Wallet fromWallet = walletDAO.lockWallet(con, userId, fromCurrency);
-			Wallet toWallet = walletDAO.lockWallet(con, userId, toCurrency);
+        BigDecimal rate = exchangeRateService.getRate(fromCurrency, toCurrency);
+        BigDecimal amountTo = calculateAmountTo(amountFrom, rate);
 
-			checkBalance(fromWallet, amountFrom);
+        try (Connection con = dataSource.getConnection()) {
+            con.setAutoCommit(false);
+            con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
-			performWalletExchange(con, userId, fromCurrency, toCurrency, amountFrom, amountTo);
+            Wallet fromWallet = walletDAO.lockWallet(con, userId, fromCurrency);
+            Wallet toWallet = walletDAO.lockWallet(con, userId, toCurrency);
 
-			Transaction tx = createTransaction(userId, fromCurrency, toCurrency, amountFrom, amountTo, rate);
-			transactionDAO.save(con, tx);
+            checkBalance(fromWallet, amountFrom);
 
-			con.commit();
-			return TransactionMapper.toResponse(tx);
+            performWalletExchange(con, userId, fromCurrency, toCurrency, amountFrom, amountTo);
 
-		} catch (Exception e) {
-			throw e instanceof ServiceException ? (ServiceException) e : new ServiceException("Exchange failed", e);
-		}
-	}
+            Transaction tx = createTransaction(userId, fromCurrency, toCurrency, amountFrom, amountTo, rate);
+            transactionDAO.save(con, tx);
 
-	private void validateRequest(Long userId, ExchangeCreateDTO request, BigDecimal rate) {
-		if (userId == null || userId <= 0)
-			throw new ServiceException("User id is required");
-		if (request == null)
-			throw new ServiceException("Exchange request is required");
-		if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0)
-			throw new ServiceException("Amount must be positive");
-		if (rate == null || rate.compareTo(BigDecimal.ZERO) <= 0)
-			throw new ServiceException("Rate must be positive");
+            con.commit();
+            return TransactionMapper.toResponse(tx);
 
-		String from = request.getFromCurrencyCode();
-		String to = request.getToCurrencyCode();
-		if (from == null || to == null || from.equalsIgnoreCase(to))
-			throw new ServiceException("Invalid currency pair");
-	}
+        } catch (Exception e) {
+            throw e instanceof ServiceException
+                    ? (ServiceException) e
+                    : new ServiceException("Exchange failed", e);
+        }
+    }
 
-	private BigDecimal calculateAmountTo(BigDecimal amountFrom, BigDecimal rate) {
-		return amountFrom.multiply(rate).setScale(4, RoundingMode.HALF_UP);
-	}
+    private void validateRequest(Long userId, ExchangeCreateDTO request) {
+        if (userId == null || userId <= 0)
+            throw new ServiceException("User id is required");
 
-	private void checkBalance(Wallet fromWallet, BigDecimal amountFrom) {
-		if (fromWallet.getBalance().compareTo(amountFrom) < 0)
-			throw new ServiceException("Insufficient balance");
-	}
+        if (request == null)
+            throw new ServiceException("Exchange request is required");
 
-	private void performWalletExchange(Connection con, Long userId, String fromCurrency, String toCurrency,
-			BigDecimal amountFrom, BigDecimal amountTo) throws SQLException {
-		walletDAO.atomicDebit(con, userId, fromCurrency, amountFrom);
-		walletDAO.atomicCredit(con, userId, toCurrency, amountTo);
-	}
+        if (request.getAmount() == null || request.getAmount().compareTo(BigDecimal.ZERO) <= 0)
+            throw new ServiceException("Amount must be positive");
 
-	private Transaction createTransaction(Long userId, String fromCurrency, String toCurrency, BigDecimal amountFrom,
-			BigDecimal amountTo, BigDecimal rate) {
-		Transaction tx = new Transaction();
-		tx.setUserId(userId);
-		tx.setFromCurrencyCode(fromCurrency);
-		tx.setToCurrencyCode(toCurrency);
-		tx.setAmountFrom(amountFrom);
-		tx.setAmountTo(amountTo);
-		tx.setExchangeRate(rate);
-		tx.setTransactionType("EXCHANGE");
-		tx.setStatus("COMPLETED");
-		tx.setCreatedAt(LocalDateTime.now());
-		return tx;
-	}
+        String from = request.getFromCurrencyCode();
+        String to = request.getToCurrencyCode();
+
+        if (from == null || to == null || from.equalsIgnoreCase(to))
+            throw new ServiceException("Invalid currency pair");
+    }
+
+    private BigDecimal calculateAmountTo(BigDecimal amountFrom, BigDecimal rate) {
+        return amountFrom.multiply(rate).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private void checkBalance(Wallet fromWallet, BigDecimal amountFrom) {
+        if (fromWallet.getBalance().compareTo(amountFrom) < 0)
+            throw new ServiceException("Insufficient balance");
+    }
+
+    private void performWalletExchange(Connection con, Long userId, String fromCurrency, String toCurrency,
+                                       BigDecimal amountFrom, BigDecimal amountTo) throws SQLException {
+        walletDAO.atomicDebit(con, userId, fromCurrency, amountFrom);
+        walletDAO.atomicCredit(con, userId, toCurrency, amountTo);
+    }
+
+    private Transaction createTransaction(Long userId, String fromCurrency, String toCurrency,
+                                          BigDecimal amountFrom, BigDecimal amountTo, BigDecimal rate) {
+        Transaction tx = new Transaction();
+        tx.setUserId(userId);
+        tx.setFromCurrencyCode(fromCurrency);
+        tx.setToCurrencyCode(toCurrency);
+        tx.setAmountFrom(amountFrom);
+        tx.setAmountTo(amountTo);
+        tx.setExchangeRate(rate);
+        tx.setTransactionType("EXCHANGE");
+        tx.setStatus("COMPLETED");
+        tx.setCreatedAt(LocalDateTime.now());
+        return tx;
+    }
 }

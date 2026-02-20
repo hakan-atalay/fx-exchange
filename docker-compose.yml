@@ -31,6 +31,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
+      TCMB_API_URL: ${TCMB_API_URL}
     ports:
       - "8080:8080"
       - "9990:9990"
