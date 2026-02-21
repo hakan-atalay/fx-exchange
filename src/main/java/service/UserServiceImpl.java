@@ -4,6 +4,7 @@ import dao.UserDAO;
 import dto.request.UserUpdateDTO;
 import dto.response.UserResponseDTO;
 import entity.User;
+import entity.enums.Role;
 import exception.ServiceException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -15,47 +16,58 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class UserServiceImpl implements UserService{
+public class UserServiceImpl implements UserService {
 
-    @Inject
-    private UserDAO userDAO;
+	@Inject
+	private UserDAO userDAO;
 
-    public UserResponseDTO getUser(Long userId) {
-        validateUserId(userId);
-        Optional<User> user = userDAO.findById(userId);
-        if (user.isEmpty()) throw new ServiceException("User not found");
-        return UserMapper.toResponse(user.get());
-    }
+	public UserResponseDTO getUser(Long userId) {
+		validateUserId(userId);
+		Optional<User> user = userDAO.findById(userId);
+		if (user.isEmpty())
+			throw new ServiceException("User not found");
+		return UserMapper.toResponse(user.get());
+	}
 
-    public List<UserResponseDTO> getAllUsers() {
-        return userDAO.findAll()
-                .stream()
-                .map(UserMapper::toResponse)
-                .collect(Collectors.toList());
-    }
+	public List<UserResponseDTO> getAllUsers() {
+		return userDAO.findAll().stream().map(UserMapper::toResponse).collect(Collectors.toList());
+	}
 
-    public UserResponseDTO updateUser(Long userId, UserUpdateDTO updateDTO) {
-        validateUserId(userId);
-        Optional<User> optionalUser = userDAO.findById(userId);
-        if (optionalUser.isEmpty()) throw new ServiceException("User not found");
+	public UserResponseDTO updateUser(Long userId, UserUpdateDTO updateDTO) {
+		validateUserId(userId);
+		Optional<User> optionalUser = userDAO.findById(userId);
+		if (optionalUser.isEmpty())
+			throw new ServiceException("User not found");
 
-        User user = optionalUser.get();
-        if (updateDTO.getFirstName() != null) user.setFirstName(updateDTO.getFirstName());
-        if (updateDTO.getLastName() != null) user.setLastName(updateDTO.getLastName());
-        if (updateDTO.getRole() != null) user.setRole(updateDTO.getRole());
-        if (updateDTO.getStatus() != null) user.setStatus(updateDTO.getStatus());
+		User user = optionalUser.get();
 
-        userDAO.update(user);
-        return UserMapper.toResponse(user);
-    }
+		if (updateDTO.getFirstName() != null)
+			user.setFirstName(updateDTO.getFirstName());
+		if (updateDTO.getLastName() != null)
+			user.setLastName(updateDTO.getLastName());
 
-    public void deleteUser(Long userId) {
-        validateUserId(userId);
-        userDAO.delete(userId);
-    }
+		if (updateDTO.getRole() != null) {
+			try {
+				user.setRoleEnum(Role.valueOf(updateDTO.getRole().toUpperCase()));
+			} catch (Exception e) {
+				throw new ServiceException("Invalid role value");
+			}
+		}
 
-    private void validateUserId(Long userId) {
-        if (userId == null || userId <= 0)
-            throw new ServiceException("Invalid userId");
-    }
+		if (updateDTO.getStatus() != null)
+			user.setStatus(updateDTO.getStatus());
+
+		userDAO.update(user);
+		return UserMapper.toResponse(user);
+	}
+
+	public void deleteUser(Long userId) {
+		validateUserId(userId);
+		userDAO.delete(userId);
+	}
+
+	private void validateUserId(Long userId) {
+		if (userId == null || userId <= 0)
+			throw new ServiceException("Invalid userId");
+	}
 }

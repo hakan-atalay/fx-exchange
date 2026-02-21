@@ -2,34 +2,66 @@ package entity;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
+import entity.enums.Role;
 
 public class User {
+
 	private Long id;
 	private String userName;
 	private String email;
 	private String passwordHash;
 	private String firstName;
 	private String lastName;
-	private String role="USER";
-	private String status="ACTIVE";
+
+	private String role = Role.USER.name();
+
+	private String status = "ACTIVE";
 	private LocalDateTime createdAt;
 	private LocalDateTime updatedAt;
-	
-	public User() {}
 
-	public User(Long id, String userName, String email, String passwordHash, String firstName, String lastName,
-			String role, String status, LocalDateTime createdAt, LocalDateTime updatedAt) {
-		super();
-		this.id = id;
-		this.userName = userName;
-		this.email = email;
-		this.passwordHash = passwordHash;
-		this.firstName = firstName;
-		this.lastName = lastName;
-		this.role = role;
-		this.status = status;
-		this.createdAt = createdAt;
-		this.updatedAt = updatedAt;
+	public User() {
+	}
+
+	public String getRole() {
+		return role;
+	}
+
+	public void setRole(String role) {
+		if (role == null || role.isBlank()) {
+			this.role = Role.USER.name();
+			return;
+		}
+
+		try {
+			Role.valueOf(role.toUpperCase());
+			this.role = role.toUpperCase();
+		} catch (IllegalArgumentException e) {
+			this.role = Role.USER.name();
+		}
+	}
+
+	public Role getRoleEnum() {
+		try {
+			return Role.valueOf(this.role);
+		} catch (Exception e) {
+			return Role.USER;
+		}
+	}
+
+	public void setRoleEnum(Role role) {
+		if (role == null) {
+			this.role = Role.USER.name();
+		} else {
+			this.role = role.name();
+		}
+	}
+
+	public boolean isAdmin() {
+		return Role.ADMIN.name().equals(this.role);
+	}
+
+	public boolean isUser() {
+		return Role.USER.name().equals(this.role);
 	}
 
 	public Long getId() {
@@ -80,14 +112,6 @@ public class User {
 		this.lastName = lastName;
 	}
 
-	public String getRole() {
-		return role;
-	}
-
-	public void setRole(String role) {
-		this.role = role;
-	}
-
 	public String getStatus() {
 		return status;
 	}
@@ -121,19 +145,9 @@ public class User {
 	public boolean equals(Object obj) {
 		if (this == obj)
 			return true;
-		if (obj == null)
-			return false;
-		if (getClass() != obj.getClass())
+		if (obj == null || getClass() != obj.getClass())
 			return false;
 		User other = (User) obj;
 		return Objects.equals(email, other.email);
 	}
-
-	@Override
-	public String toString() {
-		return "User [id=" + id + ", userName=" + userName + ", email=" + email + ", firstName=" + firstName
-				+ ", lastName=" + lastName + ", role=" + role + ", status=" + status + ", createdAt=" + createdAt
-				+ ", updatedAt=" + updatedAt + "]";
-	}
-		
 }

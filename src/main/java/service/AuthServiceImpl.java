@@ -8,10 +8,10 @@ import dto.auth.RegisterRequestDTO;
 import dto.response.UserResponseDTO;
 import entity.LoginHistory;
 import entity.User;
+import entity.enums.Role;
 import exception.DAOException;
 import exception.ServiceException;
 import infrastructure.redis.LoginAttemptRateLimiter;
-import infrastructure.redis.UserSessionService;
 import infrastructure.redis.UserLoginCacheService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -22,131 +22,124 @@ import service.interfaces.AuthService;
 import java.util.Optional;
 
 @ApplicationScoped
-public class AuthServiceImpl implements AuthService{
+public class AuthServiceImpl implements AuthService {
 
-    @Inject
-    private UserDAO userDAO;
+	@Inject
+	private UserDAO userDAO;
 
-    @Inject
-    private UserLoginCacheService userCacheService;
+	@Inject
+	private UserLoginCacheService userCacheService;
 
-    @Inject
-    private LoginHistoryDAO loginHistoryDAO;
+	@Inject
+	private LoginHistoryDAO loginHistoryDAO;
 
-    @Inject
-    private LoginAttemptRateLimiter rateLimitService;
+	@Inject
+	private LoginAttemptRateLimiter rateLimitService;
 
-    @Inject
-    private UserSessionService sessionService;
+	@Override
+	public LoginResponseDTO login(LoginRequestDTO request, String ipAddress) {
 
-    public LoginResponseDTO login(LoginRequestDTO request, String ipAddress) {
+		if (request == null || request.getEmail() == null || request.getPassword() == null)
+			throw new ServiceException("Invalid login request");
 
-        if (request == null || request.getEmail() == null || request.getPassword() == null)
-            throw new ServiceException("Invalid login request");
+		String email = request.getEmail().toLowerCase();
 
-        String email = request.getEmail().toLowerCase();
+		try {
 
-        try {
+			try {
+				rateLimitService.checkLimit(email);
+			} catch (RuntimeException ex) {
+				throw new ServiceException(ex.getMessage());
+			}
 
-            try {
-                rateLimitService.checkLimit(email);
-            } catch (RuntimeException ex) {
-                throw new ServiceException(ex.getMessage());
-            }
+			User user;
+			try {
+				user = resolveUser(email);
+			} catch (ServiceException ex) {
+				rateLimitService.recordFailure(email);
+				throw ex;
+			}
 
-            User user;
-            try {
-                user = resolveUser(email);
-            } catch (ServiceException ex) {
-                rateLimitService.recordFailure(email);
-                throw ex;
-            }
+			BCrypt.Result result = BCrypt.verifyer().verify(request.getPassword().toCharArray(),
+					user.getPasswordHash());
 
-            BCrypt.Result result = BCrypt.verifyer()
-                    .verify(request.getPassword().toCharArray(), user.getPasswordHash());
+			if (!result.verified) {
+				rateLimitService.recordFailure(email);
+				throw new ServiceException("Invalid email or password");
+			}
 
-            if (!result.verified) {
-                rateLimitService.recordFailure(email);
-                throw new ServiceException("Invalid email or password");
-            }
+			if (!"ACTIVE".equalsIgnoreCase(user.getStatus()))
+				throw new ServiceException("User is inactive");
 
-            if (!"ACTIVE".equalsIgnoreCase(user.getStatus()))
-                throw new ServiceException("User is inactive");
+			rateLimitService.reset(email);
 
-            rateLimitService.reset(email);
+			recordLogin(user.getId(), ipAddress);
 
-            recordLogin(user.getId(), ipAddress);
+			return new LoginResponseDTO(UserMapper.toResponse(user));
 
-            String sessionToken = sessionService.createSession(user.getId());
+		} catch (DAOException e) {
+			throw new ServiceException("Login failed", e);
+		}
+	}
 
-            LoginResponseDTO response = new LoginResponseDTO(UserMapper.toResponse(user));
-            response.setSessionToken(sessionToken);
-            return response;
+	@Override
+	public UserResponseDTO register(RegisterRequestDTO request) {
 
-        } catch (DAOException e) {
-            throw new ServiceException("Login failed", e);
-        }
-    }
+		if (request == null)
+			throw new ServiceException("Invalid registration request");
 
-    public UserResponseDTO register(RegisterRequestDTO request) {
+		try {
 
-        if (request == null)
-            throw new ServiceException("Invalid registration request");
+			Optional<User> existing = userDAO.findByEmail(request.getEmail());
+			if (existing.isPresent())
+				throw new ServiceException("Email is already in use");
 
-        try {
+			User user = new User();
+			user.setUserName(request.getUsername());
+			user.setEmail(request.getEmail().toLowerCase());
+			user.setPasswordHash(BCrypt.withDefaults().hashToString(12, request.getPassword().toCharArray()));
+			user.setFirstName(request.getFirstName());
+			user.setLastName(request.getLastName());
+			user.setRoleEnum(Role.USER);
+			user.setStatus("ACTIVE");
 
-            Optional<User> existing = userDAO.findByEmail(request.getEmail());
-            if (existing.isPresent())
-                throw new ServiceException("Email is already in use");
+			User saved = userDAO.save(user);
 
-            User user = new User();
-            user.setUserName(request.getUsername());
-            user.setEmail(request.getEmail().toLowerCase());
-            user.setPasswordHash(
-                    BCrypt.withDefaults().hashToString(12, request.getPassword().toCharArray())
-            );
-            user.setFirstName(request.getFirstName());
-            user.setLastName(request.getLastName());
-            user.setRole("USER");
-            user.setStatus("ACTIVE");
+			userCacheService.cacheUserId(saved.getEmail(), saved.getId());
 
-            User saved = userDAO.save(user);
+			return UserMapper.toResponse(saved);
 
-            userCacheService.cacheUserId(saved.getEmail(), saved.getId());
+		} catch (DAOException e) {
+			throw new ServiceException("Registration failed", e);
+		}
+	}
 
-            return UserMapper.toResponse(saved);
+	private User resolveUser(String email) {
 
-        } catch (DAOException e) {
-            throw new ServiceException("Registration failed", e);
-        }
-    }
+		Long cachedUserId = userCacheService.getCachedUserId(email);
 
-    private User resolveUser(String email) {
+		if (cachedUserId != null) {
+			Optional<User> user = userDAO.findById(cachedUserId);
+			if (user.isPresent()) {
+				return user.get();
+			}
+			userCacheService.evict(email);
+		}
 
-        Long cachedUserId = userCacheService.getCachedUserId(email);
+		Optional<User> optionalUser = userDAO.findByEmail(email);
+		if (optionalUser.isEmpty())
+			throw new ServiceException("Invalid email or password");
 
-        if (cachedUserId != null) {
-            Optional<User> user = userDAO.findById(cachedUserId);
-            if (user.isPresent()) {
-                return user.get();
-            }
-            userCacheService.evict(email);
-        }
+		User user = optionalUser.get();
+		userCacheService.cacheUserId(email, user.getId());
 
-        Optional<User> optionalUser = userDAO.findByEmail(email);
-        if (optionalUser.isEmpty())
-            throw new ServiceException("Invalid email or password");
+		return user;
+	}
 
-        User user = optionalUser.get();
-        userCacheService.cacheUserId(email, user.getId());
-
-        return user;
-    }
-
-    private void recordLogin(Long userId, String ip) {
-        LoginHistory history = new LoginHistory();
-        history.setUserId(userId);
-        history.setIpAddress(ip);
-        loginHistoryDAO.save(history);
-    }
+	private void recordLogin(Long userId, String ip) {
+		LoginHistory history = new LoginHistory();
+		history.setUserId(userId);
+		history.setIpAddress(ip);
+		loginHistoryDAO.save(history);
+	}
 }
