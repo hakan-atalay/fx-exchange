@@ -1,8 +1,6 @@
 package infrastructure.kafka.producer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import infrastructure.kafka.KafkaTopics;
-import infrastructure.kafka.event.ExchangeRateEvent;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -11,10 +9,9 @@ import org.apache.kafka.clients.producer.*;
 import java.util.Properties;
 
 @ApplicationScoped
-public class ExchangeRateProducer {
+public class DeadLetterProducer {
 
 	private Producer<String, String> producer;
-	private final ObjectMapper mapper = new ObjectMapper();
 
 	@PostConstruct
 	public void init() {
@@ -26,23 +23,14 @@ public class ExchangeRateProducer {
 		props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
 				"org.apache.kafka.common.serialization.StringSerializer");
 		props.put(ProducerConfig.ACKS_CONFIG, "all");
-		props.put(ProducerConfig.RETRIES_CONFIG, 3);
-		props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
 
 		producer = new KafkaProducer<>(props);
 	}
 
-	public void send(ExchangeRateEvent event) {
-		try {
-			String json = mapper.writeValueAsString(event);
+	public void send(String key, String message) {
+		ProducerRecord<String, String> record = new ProducerRecord<>(KafkaTopics.EXCHANGE_RATE_DLQ, key, message);
 
-			ProducerRecord<String, String> record = new ProducerRecord<>(KafkaTopics.EXCHANGE_RATE_EVENTS,
-					event.getTargetCurrency(), json);
-
-			producer.send(record);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+		producer.send(record);
 	}
 
 	@PreDestroy
