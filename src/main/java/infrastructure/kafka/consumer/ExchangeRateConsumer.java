@@ -36,7 +36,8 @@ public class ExchangeRateConsumer {
 	public void init() {
 
 		Properties props = new Properties();
-		props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, System.getenv("KAFKA_BOOTSTRAP_SERVERS"));
+		props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+				System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"));
 		props.put(ConsumerConfig.GROUP_ID_CONFIG, "exchange-rate-group");
 		props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
 		props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());

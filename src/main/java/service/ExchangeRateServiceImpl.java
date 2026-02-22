@@ -5,6 +5,7 @@ import dto.request.ExcangeRateCreateDTO;
 import dto.response.ExchangeRateResponseDTO;
 import entity.ExchangeRate;
 import exception.ServiceException;
+import infrastructure.redis.ExchangeRateCacheService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import mapper.ExchangeRateMapper;
@@ -15,11 +16,15 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 @ApplicationScoped
-public class ExchangeRateServiceImpl implements ExchangeRateService{
+public class ExchangeRateServiceImpl implements ExchangeRateService {
 
 	@Inject
 	private ExchangeRateDAO exchangeRateDAO;
 
+	@Inject
+	private ExchangeRateCacheService cacheService;
+
+	@Override
 	public ExchangeRateResponseDTO createOrUpdateRate(ExcangeRateCreateDTO request) {
 		validateRequest(request);
 
@@ -46,26 +51,39 @@ public class ExchangeRateServiceImpl implements ExchangeRateService{
 			return exchangeRateDAO.save(newRate);
 		});
 
+		cacheService.evict(baseCurrency, targetCurrency);
+
 		return ExchangeRateMapper.toResponse(rateEntity);
 	}
 
 	private void validateRequest(ExcangeRateCreateDTO request) {
 		if (request == null)
 			throw new ServiceException("Exchange rate request is required");
+
 		if (request.getBaseCurrency() == null || request.getTargetCurrency() == null
 				|| request.getBaseCurrency().equalsIgnoreCase(request.getTargetCurrency()))
 			throw new ServiceException("Invalid currency pair");
 	}
-	
+
+	@Override
 	public BigDecimal getRate(String base, String target) {
 
-	    if (base == null || target == null || base.equalsIgnoreCase(target))
-	        throw new ServiceException("Invalid currency pair");
+		if (base == null || target == null || base.equalsIgnoreCase(target))
+			throw new ServiceException("Invalid currency pair");
 
-	    return exchangeRateDAO
-	            .findByBaseAndTarget(base.toUpperCase(), target.toUpperCase())
-	            .map(ExchangeRate::getRate)
-	            .orElseThrow(() ->
-	                    new ServiceException("Exchange rate not available"));
+		base = base.toUpperCase();
+		target = target.toUpperCase();
+
+		BigDecimal cachedRate = cacheService.get(base, target);
+		if (cachedRate != null) {
+			return cachedRate;
+		}
+
+		BigDecimal rate = exchangeRateDAO.findByBaseAndTarget(base, target).map(ExchangeRate::getRate)
+				.orElseThrow(() -> new ServiceException("Exchange rate not available"));
+
+		cacheService.put(base, target, rate);
+
+		return rate;
 	}
 }
