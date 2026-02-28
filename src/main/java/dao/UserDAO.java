@@ -89,6 +89,17 @@ public class UserDAO extends BaseDAO implements GenericDAO<User, Long> {
 		return executeQuery(FIND_BY_EMAIL_SQL, ps -> ps.setString(1, email),
 				rs -> rs.next() ? Optional.of(mapRow(rs)) : Optional.empty());
 	}
+	
+	public Optional<String> findEmailById(Long id) {
+	    return executeQuery(FIND_BY_ID_SQL,
+	            ps -> ps.setLong(1, id),
+	            rs -> {
+	                if (rs.next()) {
+	                    return Optional.ofNullable(rs.getString("email"));
+	                }
+	                return Optional.empty();
+	            });
+	}
 
 	@Override
 	public List<User> findAll() {

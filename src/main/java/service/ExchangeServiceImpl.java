@@ -1,17 +1,20 @@
 package service;
 
 import dao.TransactionDAO;
+import dao.UserDAO;
 import dao.WalletDAO;
 import dto.request.ExchangeCreateDTO;
 import dto.response.TransactionResponseDTO;
 import entity.Transaction;
 import entity.Wallet;
 import exception.ServiceException;
+import infrastructure.kafka.event.ExchangeNotificationEvent;
+import infrastructure.kafka.producer.ExchangeNotificationProducer;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import service.interfaces.ExchangeService;
-import service.interfaces.ExchangeRateService;
 import mapper.TransactionMapper;
+import service.interfaces.ExchangeRateService;
+import service.interfaces.ExchangeService;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
@@ -33,6 +36,12 @@ public class ExchangeServiceImpl implements ExchangeService {
     private ExchangeRateService exchangeRateService;
 
     @Inject
+    private UserDAO userDAO;
+
+    @Inject
+    private ExchangeNotificationProducer notificationProducer;
+
+    @Inject
     private DataSource dataSource;
 
     @Override
@@ -46,27 +55,55 @@ public class ExchangeServiceImpl implements ExchangeService {
         BigDecimal rate = exchangeRateService.getRate(fromCurrency, toCurrency);
         BigDecimal amountTo = calculateAmountTo(amountFrom, rate);
 
+        Transaction tx;
+
         try (Connection con = dataSource.getConnection()) {
             con.setAutoCommit(false);
             con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
 
             Wallet fromWallet = walletDAO.lockWallet(con, userId, fromCurrency);
-            Wallet toWallet = walletDAO.lockWallet(con, userId, toCurrency);
 
             checkBalance(fromWallet, amountFrom);
 
             performWalletExchange(con, userId, fromCurrency, toCurrency, amountFrom, amountTo);
 
-            Transaction tx = createTransaction(userId, fromCurrency, toCurrency, amountFrom, amountTo, rate);
+            tx = createTransaction(userId, fromCurrency, toCurrency, amountFrom, amountTo, rate);
             transactionDAO.save(con, tx);
 
             con.commit();
-            return TransactionMapper.toResponse(tx);
 
         } catch (Exception e) {
             throw e instanceof ServiceException
                     ? (ServiceException) e
                     : new ServiceException("Exchange failed", e);
+        }
+
+        sendNotificationEvent(userId, fromCurrency, toCurrency, amountFrom, amountTo, rate);
+
+        return TransactionMapper.toResponse(tx);
+    }
+
+    private void sendNotificationEvent(Long userId,
+                                       String baseCurrency,
+                                       String targetCurrency,
+                                       BigDecimal amountFrom,
+                                       BigDecimal amountTo,
+                                       BigDecimal rate) {
+
+        try {
+        	String email = userDAO.findEmailById(userId)
+        	        .orElseThrow(() -> new ServiceException("User email not found"));
+
+            ExchangeNotificationEvent event = new ExchangeNotificationEvent();
+            event.setEmail(email);
+            event.setBaseCurrency(baseCurrency);
+            event.setTargetCurrency(targetCurrency);
+            event.setAmountFrom(amountFrom);
+            event.setAmountTo(amountTo);
+            event.setRate(rate);
+
+            notificationProducer.send(event);
+        } catch (Exception ignored) {
         }
     }
 
@@ -96,14 +133,22 @@ public class ExchangeServiceImpl implements ExchangeService {
             throw new ServiceException("Insufficient balance");
     }
 
-    private void performWalletExchange(Connection con, Long userId, String fromCurrency, String toCurrency,
-                                       BigDecimal amountFrom, BigDecimal amountTo) throws SQLException {
+    private void performWalletExchange(Connection con,
+                                       Long userId,
+                                       String fromCurrency,
+                                       String toCurrency,
+                                       BigDecimal amountFrom,
+                                       BigDecimal amountTo) throws SQLException {
         walletDAO.atomicDebit(con, userId, fromCurrency, amountFrom);
         walletDAO.atomicCredit(con, userId, toCurrency, amountTo);
     }
 
-    private Transaction createTransaction(Long userId, String fromCurrency, String toCurrency,
-                                          BigDecimal amountFrom, BigDecimal amountTo, BigDecimal rate) {
+    private Transaction createTransaction(Long userId,
+                                          String fromCurrency,
+                                          String toCurrency,
+                                          BigDecimal amountFrom,
+                                          BigDecimal amountTo,
+                                          BigDecimal rate) {
         Transaction tx = new Transaction();
         tx.setUserId(userId);
         tx.setFromCurrencyCode(fromCurrency);
